@@ -441,6 +441,11 @@ GO
 USE [Caso2DB]
 GO
 
+                                        --LLENADOS DE LUIS--
+                                        --LLENADOS DE LUIS--
+                                        --LLENADOS DE LUIS--
+                                        --LLENADOS DE LUIS--
+
 
 -- Insertar permisos básicos para el sistema Soltura
 INSERT INTO [dbo].[st_Permissions] ([description], [accessLevel], [createdAt], [lastUpdated], [enabled])
