@@ -855,3 +855,4 @@ SELECT * FROM st_roles_has_st_users;
 SELECT * FROM st_mediaTypes;
 SELECT * FROM st_MediaFiles;
 SELECT * FROM st_providersMediaFiles;
+
