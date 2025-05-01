@@ -74,3 +74,78 @@ GO
 
 FETCH NEXT FROM plan_cursor
 
+
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+PRINT '------------------------------------------------------------'
+PRINT 'Demostrando el uso de sp_recompile para recompilar stored procedures'
+
+-- Crear un procedimiento almacenado de ejemplo para recompilar
+IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[sp_ObtenerUsuariosActivos]') AND type in (N'P'))
+    DROP PROCEDURE [dbo].[sp_ObtenerUsuariosActivos]
+GO
+
+CREATE PROCEDURE [dbo].[sp_ObtenerUsuariosActivos]
+AS
+BEGIN
+    SELECT userID, firstName, lastName
+    FROM st_users
+    WHERE enabled = 1
+END
+GO
+
+-- Recompilar un SP específico
+EXEC sp_recompile 'dbo.sp_ObtenerUsuariosActivos';
+PRINT 'Se ha recompilado el SP: sp_ObtenerUsuariosActivos'
+
+-- Procedimiento que recompila todos los SPs cada cierto tiempo
+IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[sp_RecompileAllProcedures]') AND type in (N'P'))
+    DROP PROCEDURE [dbo].[sp_RecompileAllProcedures]
+GO
+
+CREATE PROCEDURE [dbo].[sp_RecompileAllProcedures]
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    DECLARE @procName NVARCHAR(500)
+    DECLARE @sql NVARCHAR(1000)
+    
+    -- Crear un cursor para recorrer todos los procedimientos almacenados
+    DECLARE proc_cursor CURSOR FOR 
+    SELECT name FROM sys.procedures WHERE type = 'P' AND is_ms_shipped = 0
+    
+    OPEN proc_cursor
+    FETCH NEXT FROM proc_cursor INTO @procName
+    
+    WHILE @@FETCH_STATUS = 0
+    BEGIN
+        SET @sql = 'EXEC sp_recompile ''dbo.' + @procName + ''''
+        EXEC sp_executesql @sql
+        PRINT 'Recompilado: ' + @procName
+        
+        FETCH NEXT FROM proc_cursor INTO @procName
+    END
+    
+    CLOSE proc_cursor
+    DEALLOCATE proc_cursor
+    
+    PRINT 'Todos los procedimientos han sido recompilados'
+END
+GO
+
+-- Para programar la recompilación periódica se puede utilizar SQL Server Agent Job
+-- que ejecute este SP cada día, semana o mes según necesidades
+PRINT 'Para programar recompilaciones periódicas, crear un SQL Server Agent Job que ejecute sp_RecompileAllProcedures'
+PRINT 'Por ejemplo: Ejecutar cada domingo a las 2:00 AM'
+
+EXEC [dbo].[sp_RecompileAllProcedures];
