@@ -149,3 +149,129 @@ PRINT 'Para programar recompilaciones periódicas, crear un SQL Server Agent Job 
 PRINT 'Por ejemplo: Ejecutar cada domingo a las 2:00 AM'
 
 EXEC [dbo].[sp_RecompileAllProcedures];
+
+
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+
+
+PRINT '------------------------------------------------------------'
+PRINT 'Demostrando uso de MERGE para sincronizar datos'
+
+-- Crear tabla temporal con datos de planes "actualizados"
+CREATE TABLE #PlanesActualizados (
+    planID INT,
+    planName VARCHAR(100),
+    planPrice DECIMAL(10, 2),
+    description VARCHAR(500)
+)
+
+-- Insertar datos de ejemplo (algunos existentes, algunos nuevos, algunos modificados)
+INSERT INTO #PlanesActualizados (planID, planName, planPrice, description)
+SELECT TOP 3 planID, planName, planPrice * 1.05, description + ' (Actualizado)'
+FROM st_plans
+WHERE planTypeID = 1
+
+-- Agregar un plan completamente nuevo
+INSERT INTO #PlanesActualizados (planID, planName, planPrice, description)
+VALUES (9999, 'Plan Nuevo Sincronizado', 25000.00, 'Plan creado por sincronización MERGE')
+
+-- Mostrar tabla temporal con los planes a sincronizar
+SELECT * FROM #PlanesActualizados
+
+-- Ejecutar MERGE para sincronizar los datos
+MERGE INTO st_plans AS target
+USING #PlanesActualizados AS source
+ON (target.planID = source.planID)
+WHEN MATCHED THEN
+    UPDATE SET 
+        target.planName = source.planName,
+        target.planPrice = source.planPrice,
+        target.description = source.description,
+        target.lastUpdated = GETDATE()
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (planPrice, postTime, planName, planTypeID, currencyID, description, imageURL, lastUpdated, solturaPrice)
+    VALUES (
+        source.planPrice, 
+        GETDATE(),
+        source.planName,
+        1, -- Plan Premium por defecto
+        1, -- CRC por defecto
+        source.description,
+        'https://logo.com/default_plan.jpg',
+        GETDATE(),
+        source.planPrice * 0.15
+    );
+
+PRINT 'MERGE completado - Planes sincronizados'
+
+-- Verificar los resultados
+SELECT planID, planName, planPrice, description, lastUpdated 
+FROM st_plans 
+WHERE planID IN (SELECT planID FROM #PlanesActualizados)
+OR planName = 'Plan Nuevo Sincronizado'
+
+-- Limpiar
+DROP TABLE #PlanesActualizados
+
+
+
+SELECT 
+    serviceID, serviceName, SUBSTRING(Description, 1, 20) + '...' AS shortDescription, serviceTypeID
+FROM [dbo].[st_services];
+
+
+SELECT 
+    userID,
+    firstName,
+    lastName,
+    COALESCE([password], CONVERT(VARBINARY(250), 'default_password')) AS [password],
+    COALESCE(CAST(birthDate AS VARCHAR), 'Fecha no especificada') AS birthDateText,
+    COALESCE(enabled, 1) AS enabledStatus
+FROM [dbo].[st_users];
+
+
+-- Promedio de montos pagados por usuario
+SELECT 
+    u.userID,
+    u.firstName + ' ' + u.lastName AS fullName,
+    AVG(p.amount) AS averagePaymentAmount,
+    COUNT(p.paymentID) AS totalPayments
+FROM [dbo].[st_users] u
+JOIN [dbo].[st_subcriptions] s ON u.userID = s.userID
+JOIN [dbo].[st_payments] p ON s.subcriptionID = p.paymentID
+GROUP BY u.userID, u.firstName, u.lastName
+ORDER BY averagePaymentAmount DESC;
+
+
+SELECT TOP 5
+    p.planID,
+    p.planName,
+    COUNT(s.subcriptionID) AS subscriberCount
+FROM [dbo].[st_plans] p
+LEFT JOIN [dbo].[st_subcriptions] s ON p.planTypeID = s.planTypeID
+GROUP BY p.planID, p.planName
+ORDER BY subscriberCount DESC;
+
+
+SELECT 
+    u.userID,
+    u.firstName,
+    u.lastName,
+    p.planName,
+    s.enabled
+FROM [dbo].[st_users] u
+JOIN [dbo].[st_subcriptions] s ON u.userID = s.userID
+JOIN [dbo].[st_plans] p ON s.planTypeID = p.planTypeID
+WHERE p.planTypeID = 1  -- Plan Premium
+  AND s.enabled = 1     -- Suscripción habilitada (&& sería equivalente a AND)
+ORDER BY u.lastName, u.firstName;
