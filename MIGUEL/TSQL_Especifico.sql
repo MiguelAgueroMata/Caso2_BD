@@ -162,57 +162,34 @@ EXEC [dbo].[sp_RecompileAllProcedures];
 
 
 
-
-
-PRINT '------------------------------------------------------------'
-PRINT 'Demostrando uso de MERGE para sincronizar datos'
-
--- Crear tabla temporal con datos de planes "actualizados"
-CREATE TABLE #PlanesActualizados (
-    planID INT,
-    planName VARCHAR(100),
-    planPrice DECIMAL(10, 2),
-    description VARCHAR(500)
-)
-
--- Insertar datos de ejemplo (algunos existentes, algunos nuevos, algunos modificados)
-INSERT INTO #PlanesActualizados (planID, planName, planPrice, description)
-SELECT TOP 3 planID, planName, planPrice * 1.05, description + ' (Actualizado)'
-FROM st_plans
-WHERE planTypeID = 1
-
--- Agregar un plan completamente nuevo
-INSERT INTO #PlanesActualizados (planID, planName, planPrice, description)
-VALUES (9999, 'Plan Nuevo Sincronizado', 25000.00, 'Plan creado por sincronización MERGE')
-
--- Mostrar tabla temporal con los planes a sincronizar
-SELECT * FROM #PlanesActualizados
-
--- Ejecutar MERGE para sincronizar los datos
-MERGE INTO st_plans AS target
-USING #PlanesActualizados AS source
+-- MERGE para actualizar o insertar planes desde una tabla temporal
+MERGE INTO [dbo].[st_plans] AS target
+USING (
+    SELECT 
+        planID = 100,  -- ID del plan a actualizar/insertar
+        planPrice = 45000.00,
+        planName = 'Plan Premium Plus',
+        planTypeID = 1,
+        currencyID = 1,
+        description = 'Plan con beneficios exclusivos ampliados',
+        imageURL = 'https://logo.com/premium_plus.jpg',
+        lastUpdated = GETDATE(),
+        solturaPrice = 45000.00 * 0.15
+) AS source
 ON (target.planID = source.planID)
 WHEN MATCHED THEN
     UPDATE SET 
-        target.planName = source.planName,
         target.planPrice = source.planPrice,
-        target.description = source.description,
-        target.lastUpdated = GETDATE()
-WHEN NOT MATCHED BY TARGET THEN
-    INSERT (planPrice, postTime, planName, planTypeID, currencyID, description, imageURL, lastUpdated, solturaPrice)
-    VALUES (
-        source.planPrice, 
-        GETDATE(),
-        source.planName,
-        1, -- Plan Premium por defecto
-        1, -- CRC por defecto
-        source.description,
-        'https://logo.com/default_plan.jpg',
-        GETDATE(),
-        source.planPrice * 0.15
-    );
+        target.planName = source.planName,
+        target.planTypeID = source.planTypeID,
+        target.lastUpdated = source.lastUpdated,
+        target.description = source.description
+WHEN NOT MATCHED THEN
+    INSERT (planPrice, planName, planTypeID, currencyID, description, imageURL, lastUpdated, solturaPrice)
+    VALUES (source.planPrice, source.planName, source.planTypeID, source.currencyID, 
+            source.description, source.imageURL, source.lastUpdated, source.solturaPrice);
 
-PRINT 'MERGE completado - Planes sincronizados'
+
 
 -- Verificar los resultados
 SELECT planID, planName, planPrice, description, lastUpdated 
