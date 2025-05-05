@@ -94,8 +94,8 @@ GO
 
 -- Llenado de Tasas de Cambio
 INSERT INTO [dbo].[st_exchangeRate] (
-    [currecyIdSource], [currencyIdDestiny], [startDate], [endDate], 
-    [exhangeRate], [currentExchangeRate], [currencyID]
+    [currencyIdSource], [currencyIdDestiny], [startDate], [endDate], 
+    [exchangeRate], [currentExchangeRate], [currencyID]
 )
 VALUES 
 (1, 2, '2025-01-01', '2025-12-31', 0.0020, 1, 1),
