@@ -1,31 +1,30 @@
-Tecnológico de Costa Rica
-
-Campus Tecnológico Central Cartago
-
+# Tecnológico de Costa Rica
+### *Campus Tecnológico Central Cartago*
 Escuela de Ingeniería en Computación
 
-Curso:  IC-4301 Bases de Datos I
+__Curso:__ IC-4301 Bases de Datos I
 
-Profesor
+__Profesor:__ 
+* Rodriguez Nuñez Nuñez
 
-Rodriguez Nuñez Nuñez
+__Estudiantes:__
 
-Estudiantes
+* Miguel Eduardo Agüero Mata	
 
-Miguel Eduardo Agüero Mata	
+* Luis Andrés Arrieta Viquez
 
-Luis Andrés Arrieta Viquez
+* Bryan Josué Marín Valverde
 
-Bryan Josué Marín Valverde
+* Juan Pablo Cambronero
 
-Juan Pablo Cambronero
+__Caso 2:__   Soltura
 
-Caso 2Soltura
+__Fecha de entrega:__  Martes, 6 de septiembre
 
-Fecha de entrega
+Primer semestre 2025
 
-Martes, 6 de septiembre
+---
 
-1er semestre de 2025
+
 
  
