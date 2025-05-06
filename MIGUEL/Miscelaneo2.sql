@@ -251,8 +251,8 @@ SELECT 'Resultado' = CASE @Result
 END
 
 
-DECLARE @Result INT
-EXEC @Result = [dbo].[SP_GestionarSuscripcionPremium] 
+DECLARE @Result2 INT
+EXEC @Result2 = [dbo].[SP_GestionarSuscripcionPremium] 
     @UserID = 999,  -- ID que no existe
     @PlanID = 1
     
@@ -260,12 +260,12 @@ SELECT 'Resultado' = CASE @Result
     WHEN 0 THEN 'Éxito' 
     WHEN -1 THEN 'Error de validación' 
     WHEN -99 THEN 'Error en ejecución' 
-    ELSE 'Código desconocido: ' + CAST(@Result AS VARCHAR) 
+    ELSE 'Código desconocido: ' + CAST(@Result2 AS VARCHAR) 
 END
 
 
-DECLARE @Result INT
-EXEC @Result = [dbo].[SP_GestionarSuscripcionPremium] 
+DECLARE @Result3 INT
+EXEC @Result3 = [dbo].[SP_GestionarSuscripcionPremium] 
     @UserID = 1, 
     @PlanID = 999  -- ID de plan que no existe
     
@@ -273,7 +273,7 @@ SELECT 'Resultado' = CASE @Result
     WHEN 0 THEN 'Éxito' 
     WHEN -1 THEN 'Error de validación' 
     WHEN -99 THEN 'Error en ejecución' 
-    ELSE 'Código desconocido: ' + CAST(@Result AS VARCHAR) 
+    ELSE 'Código desconocido: ' + CAST(@Result3 AS VARCHAR) 
 END
 
 SELECT p.* 
