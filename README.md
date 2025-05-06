@@ -34,7 +34,9 @@ EJEMPLO
 
 ---
 
-### Procedimiento almacenado transaccional que realice una operación del sistema, relacionado a subscripciones, pagos, servicios, transacciones o planes, y que dicha operación requiera insertar y/o actualizar al menos 3 tablas.
+## Miscelaneos
+
+### 1. Procedimiento almacenado transaccional que realice una operación del sistema, relacionado a subscripciones, pagos, servicios, transacciones o planes, y que dicha operación requiera insertar y/o actualizar al menos 3 tablas.
  ```SQL
 CREATE OR ALTER PROCEDURE [dbo].[SP_GestionarSuscripcionPremium]
     @UserID INT,
@@ -330,7 +332,7 @@ END
 
 ---
 
-### SELECT que use CASE que agrupa dinámicamente datos por rango de duracion de planes
+### 2. SELECT que use CASE que agrupa dinámicamente datos por rango de duracion de planes
 ```SQL
 SELECT 
     p.name AS Proveedor,
@@ -372,7 +374,7 @@ ORDER BY
 
 ---
 
-### Imagine una cosulta que el sistema va a necesitar para mostrar cierta información, o reporte o pantalla, y que esa consulta vaya a requerir:
+### 3. Imagine una cosulta que el sistema va a necesitar para mostrar cierta información, o reporte o pantalla, y que esa consulta vaya a requerir:
 1. 4 JOINs entre tablas.
 2. 2 funciones agregadas (ej. SUM, AVG).
 3. 3 subconsultas or 3 CTEs
@@ -477,7 +479,7 @@ ORDER BY
 
 ---
 
-### Crear una consulta con al menos 3 JOINs que analice información donde podría ser importante obtener un SET DIFFERENCE y un INTERSECTION
+### 4. Crear una consulta con al menos 3 JOINs que analice información donde podría ser importante obtener un SET DIFFERENCE y un INTERSECTION
 
 ```SQL
 -- Consulta corregida que analiza usuarios, suscripciones y pagos con operaciones de conjuntos
