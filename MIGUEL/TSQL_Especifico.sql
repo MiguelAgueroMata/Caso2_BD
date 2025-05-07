@@ -216,6 +216,41 @@ SELECT
     COALESCE(enabled, 1) AS enabledStatus
 FROM [dbo].[st_users];
 
+USE Caso2DB
+SELECT 
+    paymentMethodID,
+    name,
+    COALESCE(secretKey, CONVERT(VARBINARY(250), '')) AS secretKey,
+    COALESCE([key], CONVERT(VARBINARY(250), '')) AS [key],
+    COALESCE(apiURL, 'URL no especificada') AS apiURL,
+    COALESCE(logoURL, 'URL no especificada') AS logoURL,
+    COALESCE(configJSON, 'Configuración no especificada') AS configJSON,
+    COALESCE(CAST(lastUpdated AS VARCHAR), 'Fecha no especificada') AS lastUpdatedText,
+    COALESCE(enabled, 1) AS enabledStatus
+FROM [dbo].[st_paymentMethod];
+
+SELECT * FROM st_paymentMethod
+
+INSERT INTO [dbo].[st_paymentMethod] (
+    [name],
+    [secretKey],
+    [key],
+    [apiURL],
+    [logoURL],
+    [configJSON],
+    [lastUpdated],
+    [enabled]
+)
+VALUES (
+    'Nuevo Método de Pago', -- Nombre del método de pago
+    CONVERT(VARBINARY(250), 'mi_clave_secreta_encriptada'), -- SecretKey (binario)
+    CONVERT(VARBINARY(250), 'mi_api_key_encriptada'), -- Key (binario)
+    'https://api.nuevometodo.com/v1/pagos', -- URL de la API
+    null, -- URL del logo (puede ser NULL)
+    null, -- Configuración en JSON (puede ser NULL)
+    GETDATE(), -- Fecha de última actualización
+    1 -- Habilitado (1 = true, 0 = false)
+);
 
 -- Promedio de montos pagados por usuario
 SELECT 
