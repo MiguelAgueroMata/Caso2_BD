@@ -35,7 +35,7 @@ IF NOT EXISTS (SELECT 1 FROM dbo.st_transactionSubTypes WHERE transactionSubType
 
 -- Insertar una tasa de cambio
 IF NOT EXISTS (SELECT 1 FROM dbo.st_exchangeRate WHERE exchangeRateID = 1)
-    INSERT INTO dbo.st_exchangeRate (currecyIdSource, currencyIdDestiny, startDate, endDate, exhangeRate, currentExchangeRate, currencyID)
+    INSERT INTO dbo.st_exchangeRate (currencyIdSource, currencyIdDestiny, startDate, endDate, exchangeRate, currentExchangeRate, currencyID)
     VALUES (1, 1, GETDATE(), DATEADD(YEAR, 1, GETDATE()), 1.0, 1, 1);
 
 -- Insertar un contrato de detalle (requerido por st_usageTokens)

@@ -14,7 +14,7 @@ BEGIN TRANSACTION;
 
 -- Actualizar el precio del plan
 UPDATE dbo.st_plans
-SET planPrice = 15000.00
+SET planPrice = 157980
 WHERE planID = 1;
 
 COMMIT TRANSACTION;

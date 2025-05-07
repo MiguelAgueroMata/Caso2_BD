@@ -14,7 +14,7 @@ PRINT 'Cálculo iniciado at ' + CONVERT(VARCHAR, GETDATE(), 121)
 BEGIN TRANSACTION;
 
 -- Calcular usando el tipo de cambio
-SELECT exhangeRate
+SELECT exchangeRate
 FROM dbo.st_exchangeRate
 WHERE exchangeRateID = 1;
 

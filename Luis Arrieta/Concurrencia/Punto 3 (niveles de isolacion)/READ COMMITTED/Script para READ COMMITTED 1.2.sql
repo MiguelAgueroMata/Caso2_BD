@@ -14,7 +14,7 @@ BEGIN TRANSACTION;
 
 -- Modificar la transacción
 UPDATE dbo.st_transactions
-SET transactionAmount = 2000.00
+SET transactionAmount = 277000.00
 WHERE transactionID = 1;
 
 COMMIT TRANSACTION;

@@ -14,7 +14,7 @@ BEGIN TRANSACTION;
 
 -- Modificar el tipo de cambio sin hacer COMMIT
 UPDATE dbo.st_exchangeRate
-SET exhangeRate = 0.0030
+SET exchangeRate = 0.0930
 WHERE exchangeRateID = 1;
 
 PRINT 'Tipo de cambio modificado, esperando COMMIT...';
