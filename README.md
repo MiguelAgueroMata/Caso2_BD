@@ -2944,3 +2944,372 @@ Precio luego de la ejecucion
 |planID|	planPrice|
 | :--: | :--: |
 |1|	157980.00|
+ 
+
+### 4.Crear un cursor de update que bloquee los registros que recorre uno a uno, demuestre en que casos dicho cursor los bloquea y en que casos no, para que el equipo de desarrollo sepa para que escenarios usar cursos y cuando no.
+
+Sesion 1
+```SQL
+-- Script que usa un cursor para actualizar st_transactions y simular concurrencia con WAITFOR DELAY.
+
+USE [Caso2DB]
+GO
+
+SET NOCOUNT ON;
+
+-- Caso 1: READ COMMITTED
+PRINT '=== Caso 1: READ COMMITTED ==='
+PRINT 'Sesión 1 iniciada at ' + CONVERT(VARCHAR, GETDATE(), 121)
+
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+BEGIN TRANSACTION;
+
+DECLARE update_cursor CURSOR FOR
+SELECT usageTokenID, maxUses
+FROM dbo.st_usageTokens
+WHERE maxUses > 0;
+
+DECLARE @usageTokenID INT;
+DECLARE @currentMaxUses INT;
+DECLARE @newMaxUses INT;
+
+OPEN update_cursor;
+FETCH NEXT FROM update_cursor INTO @usageTokenID, @currentMaxUses;
+
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    SET @newMaxUses = @currentMaxUses - 1;
+    UPDATE dbo.st_usageTokens
+    SET maxUses = @newMaxUses
+    WHERE CURRENT OF update_cursor;
+
+    PRINT 'Actualizado usageTokenID = ' + CAST(@usageTokenID AS VARCHAR) + ' a maxUses = ' + CAST(@newMaxUses AS VARCHAR) + ' at ' + CONVERT(VARCHAR, GETDATE(), 121);
+
+    WAITFOR DELAY '00:00:03'; -- Pausa para permitir concurrencia
+
+    FETCH NEXT FROM update_cursor INTO @usageTokenID, @currentMaxUses;
+END;
+
+CLOSE update_cursor;
+DEALLOCATE update_cursor;
+
+COMMIT TRANSACTION;
+PRINT 'Sesión 1 finalizada at ' + CONVERT(VARCHAR, GETDATE(), 121)
+GO
+
+-- Caso 2: REPEATABLE READ
+PRINT '=== Caso 2: REPEATABLE READ ==='
+PRINT 'Sesión 1 iniciada at ' + CONVERT(VARCHAR, GETDATE(), 121)
+
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+BEGIN TRANSACTION;
+
+DECLARE update_cursor CURSOR FOR
+SELECT usageTokenID, maxUses
+FROM dbo.st_usageTokens
+WHERE maxUses > 0;
+
+DECLARE @usageTokenID INT;
+DECLARE @currentMaxUses INT;
+DECLARE @newMaxUses INT;
+
+
+OPEN update_cursor;
+FETCH NEXT FROM update_cursor INTO @usageTokenID, @currentMaxUses;
+
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    SET @newMaxUses = @currentMaxUses - 1;
+    UPDATE dbo.st_usageTokens
+    SET maxUses = @newMaxUses
+    WHERE CURRENT OF update_cursor;
+
+    PRINT 'Actualizado usageTokenID = ' + CAST(@usageTokenID AS VARCHAR) + ' a maxUses = ' + CAST(@newMaxUses AS VARCHAR) + ' at ' + CONVERT(VARCHAR, GETDATE(), 121);
+
+    WAITFOR DELAY '00:00:03';
+
+    FETCH NEXT FROM update_cursor INTO @usageTokenID, @currentMaxUses;
+END;
+
+CLOSE update_cursor;
+DEALLOCATE update_cursor;
+
+COMMIT TRANSACTION;
+PRINT 'Sesión 1 finalizada at ' + CONVERT(VARCHAR, GETDATE(), 121)
+GO
+
+-- Caso 3: SERIALIZABLE
+PRINT '=== Caso 3: SERIALIZABLE ==='
+PRINT 'Sesión 1 iniciada at ' + CONVERT(VARCHAR, GETDATE(), 121)
+
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+BEGIN TRANSACTION;
+
+DECLARE update_cursor CURSOR FOR
+SELECT usageTokenID, maxUses
+FROM dbo.st_usageTokens
+WHERE maxUses > 0;
+
+DECLARE @usageTokenID INT;
+DECLARE @currentMaxUses INT;
+DECLARE @newMaxUses INT;
+
+
+OPEN update_cursor;
+FETCH NEXT FROM update_cursor INTO @usageTokenID, @currentMaxUses;
+
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    SET @newMaxUses = @currentMaxUses - 1;
+    UPDATE dbo.st_usageTokens
+    SET maxUses = @newMaxUses
+    WHERE CURRENT OF update_cursor;
+
+    PRINT 'Actualizado usageTokenID = ' + CAST(@usageTokenID AS VARCHAR) + ' a maxUses = ' + CAST(@newMaxUses AS VARCHAR) + ' at ' + CONVERT(VARCHAR, GETDATE(), 121);
+
+    WAITFOR DELAY '00:00:03';
+
+    FETCH NEXT FROM update_cursor INTO @usageTokenID, @currentMaxUses;
+END;
+
+CLOSE update_cursor;
+DEALLOCATE update_cursor;
+
+COMMIT TRANSACTION;
+PRINT 'Sesión 1 finalizada at ' + CONVERT(VARCHAR, GETDATE(), 121)
+GO
+
+```
+
+Sesion 2
+
+```SQL
+-- Script de cursor concurrente
+-- Caso 1: Nivel de aislamiento READ COMMITTED
+-- Caso 2
+-- Caso 3
+
+USE [Caso2DB]
+GO
+
+SET NOCOUNT ON;
+
+-- Caso 1: READ COMMITTED
+PRINT '=== Caso 1: READ COMMITTED ==='
+PRINT 'Sesión 2 iniciada at ' + CONVERT(VARCHAR, GETDATE(), 121)
+
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+BEGIN TRANSACTION;
+
+-- Intentar leer el registro (debería poder leer si no está bloqueado)
+PRINT 'Intentando leer usageTokenID = 1...'
+SELECT usageTokenID, maxUses
+FROM dbo.st_usageTokens
+WHERE usageTokenID = 1;
+
+-- Intentar modificar (esperará si el cursor tiene un bloqueo exclusivo)
+PRINT 'Intentando modificar usageTokenID = 1...'
+UPDATE dbo.st_usageTokens
+SET maxUses = 10
+WHERE usageTokenID = 1;
+
+-- Intentar insertar un nuevo registro
+PRINT 'Intentando insertar un nuevo registro...'
+INSERT INTO dbo.st_usageTokens (userID, tokenType, tokenCode, createdAt, expirationDate, status, failedAttempts, contractDetailsID, maxUses)
+SELECT TOP 1 userID, 'ServiceAccess', CONVERT(VARBINARY(250), 'TOKEN_NEW'), GETDATE(), DATEADD(MONTH, 1, GETDATE()), 'Active', 0, contractDetailsID, 5
+FROM dbo.st_usageTokens
+WHERE usageTokenID = 1;
+
+COMMIT TRANSACTION;
+PRINT 'Sesión 2 finalizada at ' + CONVERT(VARCHAR, GETDATE(), 121)
+GO
+
+-- Caso 2: REPEATABLE READ
+PRINT '=== Caso 2: REPEATABLE READ ==='
+PRINT 'Sesión 2 iniciada at ' + CONVERT(VARCHAR, GETDATE(), 121)
+
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+BEGIN TRANSACTION;
+
+-- Intentar leer el registro
+PRINT 'Intentando leer usageTokenID = 1...'
+SELECT usageTokenID, maxUses
+FROM dbo.st_usageTokens
+WHERE usageTokenID = 1;
+
+-- Intentar modificar
+PRINT 'Intentando modificar usageTokenID = 1...'
+UPDATE dbo.st_usageTokens
+SET maxUses = 10
+WHERE usageTokenID = 1;
+
+-- Intentar insertar un nuevo registro
+PRINT 'Intentando insertar un nuevo registro...'
+INSERT INTO dbo.st_usageTokens (userID, tokenType, tokenCode, createdAt, expirationDate, status, failedAttempts, contractDetailsID, maxUses)
+SELECT TOP 1 userID, 'ServiceAccess', CONVERT(VARBINARY(250), 'TOKEN_NEW'), GETDATE(), DATEADD(MONTH, 1, GETDATE()), 'Active', 0, contractDetailsID, 5
+FROM dbo.st_usageTokens
+WHERE usageTokenID = 1;
+
+COMMIT TRANSACTION;
+PRINT 'Sesión 2 finalizada at ' + CONVERT(VARCHAR, GETDATE(), 121)
+GO
+
+-- Caso 3: SERIALIZABLE
+PRINT '=== Caso 3: SERIALIZABLE ==='
+PRINT 'Sesión 2 iniciada at ' + CONVERT(VARCHAR, GETDATE(), 121)
+
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+BEGIN TRANSACTION;
+
+-- Intentar leer el registro
+PRINT 'Intentando leer usageTokenID = 1...'
+SELECT usageTokenID, maxUses
+FROM dbo.st_usageTokens
+WHERE usageTokenID = 1;
+
+-- Intentar modificar
+PRINT 'Intentando modificar usageTokenID = 1...'
+UPDATE dbo.st_usageTokens
+SET maxUses = 10
+WHERE usageTokenID = 1;
+
+-- Intentar insertar un nuevo registro
+PRINT 'Intentando insertar un nuevo registro...'
+INSERT INTO dbo.st_usageTokens (userID, tokenType, tokenCode, createdAt, expirationDate, status, failedAttempts, contractDetailsID, maxUses)
+SELECT TOP 1 userID, 'ServiceAccess', CONVERT(VARBINARY(250), 'TOKEN_NEW'), GETDATE(), DATEADD(MONTH, 1, GETDATE()), 'Active', 0, contractDetailsID, 5
+FROM dbo.st_usageTokens
+WHERE usageTokenID = 1;
+
+COMMIT TRANSACTION;
+PRINT 'Sesión 2 finalizada at ' + CONVERT(VARCHAR, GETDATE(), 121)
+GO
+```
+
+### 5.Defina lo que es la "transacción de volumen" de su base de datos, por ejemplo, en uber la transacción es buscar un driver, en paypal es procesar un pago, en amazon es buscar artículos, y así sucesivamente, es la operación que más solicitudes recibe el sistema, dicho esto:
+```SQL
+-- Stored Procedure que reflejea la transacción de volumen se la base de datos, en nuestro seria "Redimir un beneficio"
+-- Esto refleja la interacción más común de los usuarios con la app Soltura al consumir beneficios como gimnasio, combustible o comidas.
+
+USE [Caso2DB]
+GO
+
+CREATE PROCEDURE dbo.RedeemBenefit
+    @usageTokenID INT
+AS
+BEGIN
+    BEGIN TRY
+        BEGIN TRANSACTION;
+
+        -- Verificar y actualizar el token
+        UPDATE dbo.st_usageTokens
+        SET maxUses = maxUses - 1
+        WHERE usageTokenID = @usageTokenID
+        AND maxUses > 0;
+
+        IF @@ROWCOUNT = 0
+            THROW 50001, 'Beneficio no disponible o ya redimido.', 1;
+
+        -- Verificar existencia de valores necesarios para st_transactions
+        DECLARE @TransactionTypeID INT;
+        DECLARE @TransactionSubTypeID INT;
+        DECLARE @CurrencyID INT;
+        DECLARE @ExchangeRateID INT;
+        DECLARE @PaymentID INT;
+
+        -- Obtener transactionTypeID
+        SELECT TOP 1 @TransactionTypeID = transactionTypeID
+        FROM dbo.st_transactionType
+        WHERE name = 'Compra'; -- Usar 'Compra' en lugar de 'Redemption'
+
+        IF @TransactionTypeID IS NULL
+            THROW 50002, 'No se encontró un tipo de transacción "Compra" en st_transactionType.', 1;
+
+        -- Obtener transactionSubTypeID
+        SELECT TOP 1 @TransactionSubTypeID = transactionSubTypesID
+        FROM dbo.st_transactionSubTypes;
+
+        IF @TransactionSubTypeID IS NULL
+            THROW 50003, 'No se encontró un subtipo de transacción en st_transactionSubTypes.', 1;
+
+        -- Obtener currencyID
+        SELECT TOP 1 @CurrencyID = currencyID
+        FROM dbo.st_currencies;
+
+        IF @CurrencyID IS NULL
+            THROW 50004, 'No se encontró una moneda en st_currencies.', 1;
+
+        -- Obtener exchangeRateID
+        SELECT TOP 1 @ExchangeRateID = exchangeRateID
+        FROM dbo.st_exchangeRate;
+
+        IF @ExchangeRateID IS NULL
+            THROW 50005, 'No se encontró una tasa de cambio en st_exchangeRate.', 1;
+
+        -- Obtener paymentID
+        SELECT TOP 1 @PaymentID = paymentID
+        FROM dbo.st_payments;
+
+        IF @PaymentID IS NULL
+            THROW 50006, 'No se encontró un pago en st_payments.', 1;
+
+        -- Registrar la transacción en st_transactions
+        INSERT INTO dbo.st_transactions 
+        (
+            transactionAmount, 
+            description, 
+            transactionDate, 
+            postTime, 
+            referenceNumber, 
+            convertedAmount, 
+            checksum, 
+            currencyID, 
+            exchangeRateID, 
+            paymentID, 
+            userID, 
+            transactionTypeID, 
+            transactionSubTypeID
+        )
+        SELECT 
+            0, -- transactionAmount
+            'Redemption of benefit', -- description
+            GETDATE(), -- transactionDate
+            GETDATE(), -- postTime
+            CAST(@usageTokenID AS VARCHAR(10)), -- referenceNumber
+            0, -- convertedAmount
+            0x0, -- checksum (valor dummy, ajusta según necesidades)
+            @CurrencyID, -- currencyID
+            @ExchangeRateID, -- exchangeRateID
+            @PaymentID, -- paymentID
+            userID, -- userID
+            @TransactionTypeID, -- transactionTypeID
+            @TransactionSubTypeID -- transactionSubTypeID
+        FROM dbo.st_usageTokens
+        WHERE usageTokenID = @usageTokenID;
+
+        COMMIT TRANSACTION;
+    END TRY
+    BEGIN CATCH
+        ROLLBACK TRANSACTION;
+        DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
+        DECLARE @ErrorSeverity INT = ERROR_SEVERITY();
+        DECLARE @ErrorState INT = ERROR_STATE();
+        RAISERROR (@ErrorMessage, @ErrorSeverity, @ErrorState);
+    END CATCH
+END
+GO
+
+EXEC dbo.RedeemBenefit @usageTokenID = 1;
+
+SELECT * FROM dbo.st_usageTokens WHERE usageTokenID = 1;
+
+SELECT * FROM dbo.st_transactions WHERE referenceNumber = '1';
+```
+
+| usageTokenID | userID | tokenType     | tokenCode                        | createdAt              | expirationDate         | status | failedAttempts | contractDetailsID | maxUses |
+|--------------|--------|---------------|----------------------------------|-------------------------|------------------------|--------|----------------|-------------------|---------|
+| 1            | 8      | ServiceAccess | 0x544F4B454E5F315F323330393636   | 2025-04-29 14:15:22.023 | 2025-05-29 14:15:22.023 | Active | 2              | 13                | 9       |
+
+| transactionID | transactionAmount | description           | transactionDate        | postTime               | referenceNumber | convertedAmount | checksum | currencyID | exchangeRateId | paymentId | userID | transactionTypeID | transactionSubTypeID |
+|---------------|-------------------|------------------------|-------------------------|-------------------------|------------------|------------------|----------|------------|----------------|-----------|--------|--------------------|------------------------|
+| 81            | 0.00              | Redemption of benefit | 2025-05-06 21:58:47.640 | 2025-05-06 21:58:47.640 | 1                | 0.00             | 0x00     | 1          | 1              | 1         | 8      | 1                  | 1                      |
+
