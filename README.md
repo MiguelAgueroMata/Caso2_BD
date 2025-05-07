@@ -23,14 +23,587 @@ __Fecha de entrega:__  Martes, 6 de septiembre
 
 Primer semestre 2025
 
----
+## Demostraciones T-SQL
 
-EJEMPLO
+#### Punto 1 y 2
+```SQL
+------------------------------------------------------------
+-- 1. Cursor LOCAL (no visible fuera de la sesión)
+------------------------------------------------------------
+DECLARE @message VARCHAR(100)
+PRINT 'Demostrando un cursor LOCAL (visible solo en esta sesión)'
 
-| Syntax      | Description |
-| ----------- | ----------- |
-| Header      | Title       |
-| Paragraph   | Text        |
+-- Creando el cursor local
+DECLARE user_cursor CURSOR LOCAL FOR
+SELECT firstName + ' ' + lastName AS NombreCompleto
+FROM st_users
+WHERE enabled = 1
+
+-- Variables para almacenar resultados
+DECLARE @nombreUsuario VARCHAR(100)
+
+-- Abrir el cursor
+OPEN user_cursor
+
+-- Recuperar la primera fila
+FETCH NEXT FROM user_cursor INTO @nombreUsuario
+
+-- Mostrar hasta 5 usuarios
+DECLARE @contador INT = 0
+WHILE @@FETCH_STATUS = 0 AND @contador < 8
+BEGIN
+    SET @contador = @contador + 1
+    PRINT 'Usuario #' + CAST(@contador AS VARCHAR) + ': ' + @nombreUsuario
+    FETCH NEXT FROM user_cursor INTO @nombreUsuario
+END
+
+-- Cerrar y liberar el cursor
+CLOSE user_cursor
+DEALLOCATE user_cursor
+GO
+
+FETCH NEXT FROM user_cursor
+-- Nota: Este cursor LOCAL no puede ser accedido desde otra conexión
+-- Si intentas abrir otro Query y escribir 'FETCH NEXT FROM user_cursor', obtendrás un error
+
+
+------------------------------------------------------------
+-- 2. Cursor GLOBAL (accesible desde otras sesiones)
+------------------------------------------------------------
+PRINT '------------------------------------------------------------'
+PRINT 'Demostrando un cursor GLOBAL (visible desde otras conexiones)'
+
+-- Creando cursor global (separa en batches para demostrar persistencia)
+DECLARE plan_cursor CURSOR GLOBAL FOR
+SELECT planName, planPrice FROM st_plans WHERE planTypeID = 1
+
+OPEN plan_cursor
+GO
+
+-- Continuación del cursor GLOBAL en el mismo connection
+DECLARE @planNombre VARCHAR(100), @planPrecio DECIMAL(10,2), @contador INT = 0
+
+PRINT 'Continuando procesamiento del cursor GLOBAL...'
+FETCH NEXT FROM plan_cursor INTO @planNombre, @planPrecio
+
+WHILE @@FETCH_STATUS = 0 AND @contador < 4
+BEGIN
+    SET @contador = @contador + 1
+    PRINT '[GLOBAL] Plan #' + CAST(@contador AS VARCHAR) + ': ' + @planNombre + ' - $' + CAST(@planPrecio AS VARCHAR)
+    FETCH NEXT FROM plan_cursor INTO @planNombre, @planPrecio
+END
+GO
+
+
+CLOSE plan_cursor
+DEALLOCATE plan_cursor
+GO
+
+FETCH NEXT FROM plan_cursor 
+
+```
+
+#### Punto 3 trigger
+
+```SQL
+------------------------------------------------------------
+-- 3. Trigger para log de inserciones en pagos
+------------------------------------------------------------
+PRINT 'Demostrando el uso de un TRIGGER para log de inserciones en pagos'
+
+-- Crear tabla de log para pagos
+IF OBJECT_ID('dbo.st_paymentLog', 'U') IS NOT NULL
+    DROP TABLE dbo.st_paymentLog;
+GO
+
+CREATE TABLE dbo.st_paymentLog (
+    logID INT IDENTITY(1,1) PRIMARY KEY,
+    paymentID INT,
+    amount DECIMAL(10,2),
+    paymentDate DATETIME,
+    userID INT NULL, -- Permitir NULL ya que no podemos obtener userID directamente
+    logAction VARCHAR(50),
+    logDate DATETIME DEFAULT GETDATE()
+);
+GO
+
+-- Crear trigger
+IF EXISTS (SELECT * FROM sys.triggers WHERE name = 'trg_LogPaymentInsert')
+    DROP TRIGGER dbo.trg_LogPaymentInsert;
+GO
+
+CREATE TRIGGER dbo.trg_LogPaymentInsert
+ON dbo.st_payments
+AFTER INSERT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    INSERT INTO dbo.st_paymentLog (paymentID, amount, paymentDate, userID, logAction)
+    SELECT 
+        i.paymentID,
+        i.amount,
+        i.paymentDate,
+        NULL, -- No hay relación directa para obtener userID
+        'INSERT'
+    FROM inserted i;
+END;
+GO
+
+-- Probar el trigger con una inserción válida
+INSERT INTO dbo.st_payments (
+    paymentMethodID, amount, actualAmount, result, authentication, 
+    reference, chargedToken, description, paymentDate, checksum, currencyID
+)
+VALUES (
+    1, 25000.00, 25000.00, 'Success', 'AUTH_TEST',
+    'REF_TEST', CONVERT(VARBINARY(250), 'TOKEN_TEST'), 'Pago de prueba', GETDATE(),
+    CONVERT(VARBINARY(250), 'CHECKSUM_TEST'), 1
+);
+
+-- Verificar el log
+SELECT * FROM dbo.st_paymentLog;
+GO
+```
+
+### Punto 4 Sp Recompile
+
+```SQL
+PRINT '------------------------------------------------------------'
+PRINT 'Demostrando el uso de sp_recompile para recompilar stored procedures'
+
+-- Crear un procedimiento almacenado de ejemplo para recompilar
+IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[sp_ObtenerUsuariosActivos]') AND type in (N'P'))
+    DROP PROCEDURE [dbo].[sp_ObtenerUsuariosActivos]
+GO
+
+CREATE PROCEDURE [dbo].[sp_ObtenerUsuariosActivos]
+AS
+BEGIN
+    SELECT userID, firstName, lastName
+    FROM st_users
+    WHERE enabled = 1
+END
+GO
+
+-- Recompilar un SP específico
+EXEC sp_recompile 'dbo.sp_ObtenerUsuariosActivos';
+PRINT 'Se ha recompilado el SP: sp_ObtenerUsuariosActivos'
+
+-- Procedimiento que recompila todos los SPs cada cierto tiempo
+IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[sp_RecompileAllProcedures]') AND type in (N'P'))
+    DROP PROCEDURE [dbo].[sp_RecompileAllProcedures]
+GO
+
+CREATE PROCEDURE [dbo].[sp_RecompileAllProcedures]
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    DECLARE @procName NVARCHAR(500)
+    DECLARE @sql NVARCHAR(1000)
+    
+    -- Crear un cursor para recorrer todos los procedimientos almacenados
+    DECLARE proc_cursor CURSOR FOR 
+    SELECT name FROM sys.procedures WHERE type = 'P' AND is_ms_shipped = 0
+    
+    OPEN proc_cursor
+    FETCH NEXT FROM proc_cursor INTO @procName
+    
+    WHILE @@FETCH_STATUS = 0
+    BEGIN
+        SET @sql = 'EXEC sp_recompile ''dbo.' + @procName + ''''
+        EXEC sp_executesql @sql
+        PRINT 'Recompilado: ' + @procName
+        
+        FETCH NEXT FROM proc_cursor INTO @procName
+    END
+    
+    CLOSE proc_cursor
+    DEALLOCATE proc_cursor
+    
+    PRINT 'Todos los procedimientos han sido recompilados'
+END
+GO
+
+-- Para programar la recompilación periódica se puede utilizar SQL Server Agent Job
+-- que ejecute este SP cada día, semana o mes según necesidades
+PRINT 'Para programar recompilaciones periódicas, crear un SQL Server Agent Job que ejecute sp_RecompileAllProcedures'
+PRINT 'Por ejemplo: Ejecutar cada domingo a las 2:00 AM'
+
+EXEC [dbo].[sp_RecompileAllProcedures];
+```
+Demostrando el uso de sp_recompile para recompilar stored procedures
+
+Object 'dbo.sp_ObtenerUsuariosActivos' was successfully marked for recompilation.
+
+Se ha recompilado el SP: sp_ObtenerUsuariosActivos
+
+Para programar recompilaciones periódicas, crear un SQL Server Agent Job que ejecute sp_RecompileAllProcedures
+
+Por ejemplo: Ejecutar cada domingo a las 2:00 AM
+
+Object 'dbo.SP_GestionarSuscripcionPremium' was successfully marked for recompilation.
+
+Recompilado: SP_GestionarSuscripcionPremium
+
+Object 'dbo.InnerTransactionSP' was successfully marked for recompilation.
+
+Recompilado: InnerTransactionSP
+
+Object 'dbo.MiddleTransactionSP' was successfully marked for recompilation.
+
+Recompilado: MiddleTransactionSP
+
+Object 'dbo.OuterTransactionSP' was successfully marked for recompilation.
+
+Recompilado: OuterTransactionSP
+
+Object 'dbo.GetUserSubscriptionsJSON' was successfully marked for recompilation.
+
+Recompilado: GetUserSubscriptionsJSON
+
+Object 'dbo.UpdateProviderContract' was successfully marked for recompilation.
+
+Recompilado: UpdateProviderContract
+
+Object 'dbo.sp_ObtenerUsuariosActivos' was successfully marked for recompilation.
+
+Recompilado: sp_ObtenerUsuariosActivos
+
+Object 'dbo.sp_RecompileAllProcedures' was successfully marked for recompilation.
+
+Recompilado: sp_RecompileAllProcedures
+
+Object 'dbo.llenarProveedoresContratosYServicios' was successfully marked for recompilation.
+
+Recompilado: llenarProveedoresContratosYServicios
+
+Object 'dbo.llenarUsuariosAutenticacionYSuscripciones' was successfully marked for recompilation.
+
+Recompilado: llenarUsuariosAutenticacionYSuscripciones
+
+Object 'dbo.llenarBeneficiariesPerPlan' was successfully marked for recompilation.
+
+Recompilado: llenarBeneficiariesPerPlan
+
+Object 'dbo.llenarPagosYTransacciones' was successfully marked for recompilation.
+
+Recompilado: llenarPagosYTransacciones
+
+Object 'dbo.llenarSchedulesYDetails' was successfully marked for recompilation.
+
+Recompilado: llenarSchedulesYDetails
+
+Object 'dbo.llenarMediaFilesYProvidersMediaFiles' was successfully marked for recompilation.
+
+Recompilado: llenarMediaFilesYProvidersMediaFiles
+
+Object 'dbo.llenarUserContactInfo' was successfully marked for recompilation.
+
+Recompilado: llenarUserContactInfo
+
+Object 'dbo.llenarUsageTokensYTransactions' was successfully marked for recompilation.
+
+Recompilado: llenarUsageTokensYTransactions
+
+Object 'dbo.llenarContractRenewals' was successfully marked for recompilation.
+
+Recompilado: llenarContractRenewals
+
+Object 'dbo.sp_upgraddiagrams' was successfully marked for recompilation.
+
+Recompilado: sp_upgraddiagrams
+
+Object 'dbo.sp_helpdiagrams' was successfully marked for recompilation.
+
+Recompilado: sp_helpdiagrams
+
+Object 'dbo.sp_helpdiagramdefinition' was successfully marked for recompilation.
+
+Recompilado: sp_helpdiagramdefinition
+
+Object 'dbo.sp_creatediagram' was successfully marked for recompilation.
+
+Recompilado: sp_creatediagram
+
+Object 'dbo.sp_renamediagram' was successfully marked for recompilation.
+
+
+Recompilado: sp_renamediagram
+
+Object 'dbo.sp_alterdiagram' was successfully marked for recompilation.
+
+Recompilado: sp_alterdiagram
+
+
+Object 'dbo.sp_dropdiagram' was successfully marked for recompilation.
+
+Recompilado: sp_dropdiagram
+
+Todos los procedimientos han sido recompilados
+
+#### Punto 5 Merge
+
+```SQL
+-- MERGE para actualizar o insertar planes desde una tabla temporal
+MERGE INTO [dbo].[st_plans] AS target
+USING (
+    SELECT 
+        planID = 100,  -- ID del plan a actualizar/insertar
+        planPrice = 9999.00,
+        planName = 'Plan Gogeta SSJ Blue',
+        planTypeID = 1,
+        currencyID = 1,
+        description = 'Plan sayajin, no es para terricolas',
+        imageURL = 'https://logo.com/premium_plus.jpg',
+        lastUpdated = GETDATE(),
+        solturaPrice = 45000.00 * 0.15
+) AS source
+ON (target.planID = source.planID)
+WHEN MATCHED THEN
+    UPDATE SET 
+        target.planPrice = source.planPrice,
+        target.planName = source.planName,
+        target.planTypeID = source.planTypeID,
+        target.lastUpdated = source.lastUpdated,
+        target.description = source.description
+WHEN NOT MATCHED THEN
+    INSERT (planPrice, planName, planTypeID, currencyID, description, imageURL, lastUpdated, solturaPrice)
+    VALUES (source.planPrice, source.planName, source.planTypeID, source.currencyID, 
+            source.description, source.imageURL, source.lastUpdated, source.solturaPrice);
+
+
+
+-- Verificar los resultados
+SELECT planID, planName, planPrice, description, lastUpdated 
+FROM st_plans 
+WHERE planID IN (SELECT planID FROM st_plans)
+OR planName = 'Plan Nuevo Sincronizado'
+```
+
+| ID  | Nombre del Plan               | Precio     | Descripción                                  | Última Actualización         |
+|----:|-------------------------------|-----------:|---------------------------------------------|------------------------------|
+| 1   | Plan_1_271                    | 157,980.00 | Descripción del plan #1                     | 2025-04-29 14:11:50.850      |
+| 2   | Plan_2_555                    | 18,366.69  | Descripción del plan #2                     | 2025-04-29 14:11:50.853      |
+| 3   | Plan_3_533                    | 53,677.83  | Descripción del plan #3 (Actualizado)       | 2025-05-01 13:00:27.483      |
+| 4   | Plan_4_564                    | 52,373.05  | Descripción del plan #4                     | 2025-04-29 14:11:50.853      |
+| 5   | Plan_5_879                    | 24,719.16  | Descripción del plan #5                     | 2025-04-29 14:11:50.853      |
+| 6   | Plan_6_548                    | 48,165.94  | Descripción del plan #6                     | 2025-04-29 14:11:50.853      |
+| 7   | Plan_7_286                    | 20,734.75  | Descripción del plan #7 (Actualizado)       | 2025-05-01 13:00:27.483      |
+| 8   | Plan_8_851                    | 24,771.26  | Descripción del plan #8 (Actualizado)       | 2025-05-01 13:00:27.483      |
+| 9   | Plan_9_696                    | 57,291.70  | Descripción del plan #9                     | 2025-04-29 14:11:50.853      |
+| 10  | Plan Nuevo Sincronizado       | 25,000.00  | Plan creado por sincronización MERGE        | 2025-05-01 13:00:27.483      |
+| 11  | Plan Premium Plus             | 45,000.00  | Plan con beneficios exclusivos ampliados    | 2025-05-01 14:22:55.603      |
+| 12  | Plan Premium Plus             | 45,000.00  | Plan con beneficios exclusivos ampliados    | 2025-05-06 21:01:56.227      |
+| 13  | Plan Premium Plus             | 45,000.00  | Plan con beneficios exclusivos ampliados    | 2025-05-06 21:04:10.887      |
+| 14  | Plan Gogeta SSJ4              | 9,999.00   | Plan con beneficios exclusivos ampliados    | 2025-05-06 21:08:26.923      |
+| 15  | Plan Gogeta SSJ Blue          | 9,999.00   | Plan sayajin, no es para terricolas         | 2025-05-06 21:14:48.810      |
+
+
+#### Punto 6 Coalesce
+
+```SQL
+SELECT 
+    paymentMethodID,
+    name,
+    COALESCE(secretKey, CONVERT(VARBINARY(250), '')) AS secretKey,
+    COALESCE([key], CONVERT(VARBINARY(250), '')) AS [key],
+    COALESCE(apiURL, 'URL no especificada') AS apiURL,
+    COALESCE(logoURL, 'URL no especificada') AS logoURL,
+    COALESCE(configJSON, 'Configuración no especificada') AS configJSON,
+    COALESCE(CAST(lastUpdated AS VARCHAR), 'Fecha no especificada') AS lastUpdatedText,
+    COALESCE(enabled, 1) AS enabledStatus
+FROM [dbo].[st_paymentMethod];
+
+```
+Antes de Coalesce
+| paymentMethodID | Nombre                 | Secret Key                                                 | Key                                                     | API URL                                   | Logo URL                  | Config JSON           | Last Updated           | Enabled |
+|-----------------|------------------------|-------------------------------------------------------------|----------------------------------------------------------|--------------------------------------------|----------------------------|------------------------|--------------------------|---------|
+| 1               | Tarjeta de crédito     | 0x1234                                                      | 0x5678                                                   | https://api.payment.com                    | https://logo.com/tc.jpg    | {"type":"credit"}     | 2025-04-29 14:10:48.623  | 1       |
+| 2               | Transferencia bancaria | 0x9012                                                      | 0x3456                                                   | https://api.bank.com                       | https://logo.com/tb.jpg    | {"type":"bank"}       | 2025-04-29 14:10:48.623  | 1       |
+| 3               | Nuevo Método de Pago   | 0x6D695F636C6176655F736563726574615F656E6372697074616461   | 0x6D695F6170695F6B65795F656E6372697074616461            | https://api.nuevometodo.com/v1/pagos       | NULL                       | NULL                   | 2025-05-06 21:38:50.233  | 1       |
+
+Despues de Coalesce
+| paymentMethodID | Nombre                  | Secret Key                                                   | Key                                                     | API URL                                  | Logo URL                      | Config JSON           | Last Updated Text        | Enabled Status |
+|------------------|-------------------------|---------------------------------------------------------------|----------------------------------------------------------|-------------------------------------------|-------------------------------|------------------------|---------------------------|----------------|
+| 1                | Tarjeta de crédito      | 0x1234                                                        | 0x5678                                                   | https://api.payment.com                   | https://logo.com/tc.jpg       | {"type":"credit"}     | Apr 29 2025  2:10PM       | 1              |
+| 2                | Transferencia bancaria  | 0x9012                                                        | 0x3456                                                   | https://api.bank.com                      | https://logo.com/tb.jpg       | {"type":"bank"}       | Apr 29 2025  2:10PM       | 1              |
+| 3                | Nuevo Método de Pago    | 0x6D695F636C6176655F736563726574615F656E6372697074616461     | 0x6D695F6170695F6B65795F656E6372697074616461            | https://api.nuevometodo.com/v1/pagos      | URL no especificada           | Configuración no especificada | May  6 2025  9:38PM     | 1              |
+
+
+#### Punto 7 substring
+
+```SQL
+SELECT 
+    serviceID, serviceName, SUBSTRING(Description, 1, 20) + '...' AS shortDescription, serviceTypeID
+FROM [dbo].[st_services];
+```
+
+| serviceID | serviceName          | shortDescription        | serviceTypeID |
+| --------- | -------------------- | ----------------------- | ------------- |
+| 1         | Telefonía\_277       | Servicio #1 del prov... | 10            |
+| 2         | Telefonía\_385       | Servicio #2 del prov... | 10            |
+| 3         | Alimentación\_518    | Servicio #3 del prov... | 9             |
+| 4         | Parqueo\_739         | Servicio #4 del prov... | 3             |
+| 5         | Entretenimiento\_4   | Servicio #1 del prov... | 4             |
+| 6         | Combustible\_316     | Servicio #2 del prov... | 7             |
+| 7         | Lavandería\_976      | Servicio #3 del prov... | 5             |
+| 8         | Salud\_820           | Servicio #4 del prov... | 2             |
+| 9         | Lavandería\_356      | Servicio #1 del prov... | 5             |
+| 10        | Parqueo\_266         | Servicio #2 del prov... | 3             |
+| 11        | Lavandería\_558      | Servicio #3 del prov... | 5             |
+| 12        | Limpieza\_12         | Servicio #1 del prov... | 6             |
+| 13        | Entretenimiento\_650 | Servicio #2 del prov... | 4             |
+| 14        | Alimentación\_72     | Servicio #3 del prov... | 9             |
+| 15        | Gimnasio\_361        | Servicio #4 del prov... | 1             |
+| 16        | Entretenimiento\_46  | Servicio #1 del prov... | 4             |
+| 17        | Limpieza\_159        | Servicio #2 del prov... | 6             |
+| 18        | Alimentación\_919    | Servicio #3 del prov... | 9             |
+| 19        | Limpieza\_79         | Servicio #1 del prov... | 6             |
+| 20        | Limpieza\_884        | Servicio #2 del prov... | 6             |
+| 21        | Alimentación\_785    | Servicio #1 del prov... | 9             |
+| 22        | Belleza\_906         | Servicio #2 del prov... | 8             |
+| 23        | Lavandería\_507      | Servicio #3 del prov... | 5             |
+
+#### LTRIM, UNION, DISTINCT, &&
+
+```SQL
+PRINT 'Demostrando LTRIM, UNION, DISTINCT y && en una sola consulta'
+
+-- Reporte de servicios asignados a planes premium y familiares
+SELECT DISTINCT -- Uso de DISTINCT para evitar duplicados
+    s.serviceID,
+    s.serviceName,
+    LTRIM(s.description) AS cleanedDescription, -- Uso de LTRIM
+    p.planName,
+    'Premium' AS planCategory
+FROM dbo.st_services s
+JOIN dbo.st_planServices ps ON s.serviceID = ps.serviceID
+JOIN dbo.st_plans p ON ps.planID = p.planID
+WHERE p.planTypeID = 1
+UNION -- Uso de UNION
+SELECT DISTINCT
+    s.serviceID,
+    s.serviceName,
+    LTRIM(s.description) AS cleanedDescription,
+    p.planName,
+    'Familiar' AS planCategory
+FROM dbo.st_services s
+JOIN dbo.st_planServices ps ON s.serviceID = ps.serviceID
+JOIN dbo.st_plans p ON ps.planID = p.planID
+WHERE p.planTypeID = 2
+ORDER BY serviceName, planName;
+
+PRINT 'Explicación de &&: En T-SQL, se usa AND en lugar de &&. && es un operador lógico en lenguajes como C, C++, JavaScript.'
+PRINT 'En esta consulta, AND combina condiciones implícitamente en los JOINs.'
+GO
+```
+
+#### SCHEMABINDING, WITH ENCRYPTION, EXECUTE AS
+
+```SQL
+PRINT 'Demostrando SCHEMABINDING, WITH ENCRYPTION, EXECUTE AS en un procedimiento'
+
+-- Crear vista con SCHEMABINDING
+IF OBJECT_ID('dbo.vw_ActiveSubscriptions', 'V') IS NOT NULL
+    DROP VIEW dbo.vw_ActiveSubscriptions;
+GO
+
+CREATE VIEW dbo.vw_ActiveSubscriptions
+WITH SCHEMABINDING
+AS
+SELECT 
+    s.subcriptionID,
+    s.userID,
+    u.firstName,
+    u.lastName,
+    p.planName
+FROM dbo.st_subcriptions s
+JOIN dbo.st_users u ON s.userID = u.userID
+JOIN dbo.st_plans p ON s.planTypeID = p.planTypeID
+WHERE s.enabled = 1;
+GO
+
+-- Crear procedimiento con WITH ENCRYPTION y EXECUTE AS
+IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[sp_ReportActiveSubscriptions]'))
+    DROP PROCEDURE [dbo].[sp_ReportActiveSubscriptions];
+GO
+
+CREATE PROCEDURE [dbo].[sp_ReportActiveSubscriptions]
+WITH ENCRYPTION, EXECUTE AS 'dbo'
+AS
+BEGIN
+    SET NOCOUNT ON;
+    PRINT 'Reporte de suscripciones activas ejecutado con permisos de dbo (EXECUTE AS).'
+    PRINT 'El procedimiento está encriptado (WITH ENCRYPTION) y usa una vista con SCHEMABINDING.'
+    
+    SELECT 
+        subcriptionID,
+        firstName + ' ' + lastName AS fullName,
+        planName
+    FROM dbo.vw_ActiveSubscriptions
+    ORDER BY fullName;
+END;
+GO
+
+-- Probar el procedimiento
+EXEC dbo.sp_ReportActiveSubscriptions;
+GO
+
+-- Demostrar SCHEMABINDING (intentar modificar tabla)
+BEGIN TRY
+    ALTER TABLE dbo.st_subcriptions DROP COLUMN enabled;
+    PRINT 'Modificación de tabla exitosa (no debería ocurrir)';
+END TRY
+BEGIN CATCH
+    PRINT 'Error: No se puede modificar la tabla debido a SCHEMABINDING en la vista vw_ActiveSubscriptions';
+    PRINT ERROR_MESSAGE();
+END CATCH;
+GO
+
+-- Demostrar WITH ENCRYPTION (intentar ver definición)
+EXEC sp_helptext 'dbo.sp_ReportActiveSubscriptions';
+-- Resultado: 'The text for object ''dbo.sp_ReportActiveSubscriptions'' is encrypted.'
+GO
+
+```
+
+Demostrando SCHEMABINDING, WITH ENCRYPTION, EXECUTE AS en un procedimiento
+Reporte de suscripciones activas ejecutado con permisos de dbo (EXECUTE AS).
+El procedimiento está encriptado (WITH ENCRYPTION) y usa una vista con SCHEMABINDING.
+Error: No se puede modificar la tabla debido a SCHEMABINDING en la vista vw_ActiveSubscriptions
+ALTER TABLE DROP COLUMN enabled failed because one or more objects access this column.
+The text for object 'dbo.sp_ReportActiveSubscriptions' is encrypted.
+
+| serviceID | serviceName          | cleanedDescription           | planName     | planCategory |
+| --------- | -------------------- | ---------------------------- | ------------ | ------------ |
+| 3         | Alimentación\_518    | Servicio #3 del proveedor #1 | Plan\_7\_286 | Premium      |
+| 3         | Alimentación\_518    | Servicio #3 del proveedor #1 | Plan\_9\_696 | Premium      |
+| 14        | Alimentación\_72     | Servicio #3 del proveedor #4 | Plan\_3\_533 | Premium      |
+| 21        | Alimentación\_785    | Servicio #1 del proveedor #7 | Plan\_8\_851 | Premium      |
+| 18        | Alimentación\_919    | Servicio #3 del proveedor #5 | Plan\_1\_271 | Familiar     |
+| 18        | Alimentación\_919    | Servicio #3 del proveedor #5 | Plan\_2\_555 | Familiar     |
+| 5         | Entretenimiento\_4   | Servicio #1 del proveedor #2 | Plan\_2\_555 | Familiar     |
+| 16        | Entretenimiento\_46  | Servicio #1 del proveedor #5 | Plan\_1\_271 | Familiar     |
+| 16        | Entretenimiento\_46  | Servicio #1 del proveedor #5 | Plan\_8\_851 | Premium      |
+| 13        | Entretenimiento\_650 | Servicio #2 del proveedor #4 | Plan\_2\_555 | Familiar     |
+| 13        | Entretenimiento\_650 | Servicio #2 del proveedor #4 | Plan\_7\_286 | Premium      |
+| 13        | Entretenimiento\_650 | Servicio #2 del proveedor #4 | Plan\_8\_851 | Premium      |
+| 9         | Lavandería\_356      | Servicio #1 del proveedor #3 | Plan\_6\_548 | Familiar     |
+| 23        | Lavandería\_507      | Servicio #3 del proveedor #7 | Plan\_2\_555 | Familiar     |
+| 11        | Lavandería\_558      | Servicio #3 del proveedor #3 | Plan\_7\_286 | Premium      |
+| 7         | Lavandería\_976      | Servicio #3 del proveedor #2 | Plan\_8\_851 | Premium      |
+| 17        | Limpieza\_159        | Servicio #2 del proveedor #5 | Plan\_8\_851 | Premium      |
+| 19        | Limpieza\_79         | Servicio #1 del proveedor #6 | Plan\_6\_548 | Familiar     |
+| 19        | Limpieza\_79         | Servicio #1 del proveedor #6 | Plan\_9\_696 | Premium      |
+| 20        | Limpieza\_884        | Servicio #2 del proveedor #6 | Plan\_8\_851 | Premium      |
+| 20        | Limpieza\_884        | Servicio #2 del proveedor #6 | Plan\_9\_696 | Premium      |
+| 10        | Parqueo\_266         | Servicio #2 del proveedor #3 | Plan\_2\_555 | Familiar     |
+| 10        | Parqueo\_266         | Servicio #2 del proveedor #3 | Plan\_7\_286 | Premium      |
+| 8         | Salud\_820           | Servicio #4 del proveedor #2 | Plan\_9\_696 | Premium      |
+| 1         | Telefonía\_277       | Servicio #1 del proveedor #1 | Plan\_9\_696 | Premium      |
+| 2         | Telefonía\_385       | Servicio #2 del proveedor #1 | Plan\_6\_548 | Familiar     |
+
 
 ---
 ## Mantenimiento de la Seguridad
@@ -403,7 +976,7 @@ GO
 
 ## Miscelaneos
 
-### 1. Procedimiento almacenado transaccional que realice una operación del sistema, relacionado a subscripciones, pagos, servicios, transacciones o planes, y que dicha operación requiera insertar y/o actualizar al menos 3 tablas.
+### 2. Procedimiento almacenado transaccional que realice una operación del sistema, relacionado a subscripciones, pagos, servicios, transacciones o planes, y que dicha operación requiera insertar y/o actualizar al menos 3 tablas.
  ```SQL
 CREATE OR ALTER PROCEDURE [dbo].[SP_GestionarSuscripcionPremium]
     @UserID INT,
@@ -699,7 +1272,7 @@ END
 
 
 
-## 2. SELECT que use CASE que agrupa dinámicamente datos por rango de duracion de planes
+## 3. SELECT que use CASE que agrupa dinámicamente datos por rango de duracion de planes
 ```SQL
 SELECT 
     p.name AS Proveedor,
@@ -741,7 +1314,7 @@ ORDER BY
 
 ---
 
-## 3. Imagine una cosulta que el sistema va a necesitar para mostrar cierta información, o reporte o pantalla, y que esa consulta vaya a requerir:
+## 4. Imagine una cosulta que el sistema va a necesitar para mostrar cierta información, o reporte o pantalla, y que esa consulta vaya a requerir:
 1. 4 JOINs entre tablas.
 2. 2 funciones agregadas (ej. SUM, AVG).
 3. 3 subconsultas or 3 CTEs
@@ -2295,7 +2868,7 @@ Sesión 2 finalizada at 2025-05-06 20:24:56.033
 
 #### Serializable
 
-Precio antes de ejecutar el Serializable\
+Precio antes de ejecutar el Serializable
 
 |planID|	planPrice|
 | :--: | :--: |

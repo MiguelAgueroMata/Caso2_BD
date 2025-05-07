@@ -72,7 +72,8 @@ CLOSE plan_cursor
 DEALLOCATE plan_cursor
 GO
 
-FETCH NEXT FROM plan_cursor
+FETCH NEXT FROM plan_cursor INTO @planNombre, @planPrecio
+Go
 
 
 
@@ -167,11 +168,11 @@ MERGE INTO [dbo].[st_plans] AS target
 USING (
     SELECT 
         planID = 100,  -- ID del plan a actualizar/insertar
-        planPrice = 45000.00,
-        planName = 'Plan Premium Plus',
+        planPrice = 9999.00,
+        planName = 'Plan Gogeta SSJ Blue',
         planTypeID = 1,
         currencyID = 1,
-        description = 'Plan con beneficios exclusivos ampliados',
+        description = 'Plan sayajin, no es para terricolas',
         imageURL = 'https://logo.com/premium_plus.jpg',
         lastUpdated = GETDATE(),
         solturaPrice = 45000.00 * 0.15
@@ -194,11 +195,10 @@ WHEN NOT MATCHED THEN
 -- Verificar los resultados
 SELECT planID, planName, planPrice, description, lastUpdated 
 FROM st_plans 
-WHERE planID IN (SELECT planID FROM #PlanesActualizados)
+WHERE planID IN (SELECT planID FROM st_plans)
 OR planName = 'Plan Nuevo Sincronizado'
 
--- Limpiar
-DROP TABLE #PlanesActualizados
+
 
 
 
