@@ -35,7 +35,7 @@ END;
 GO
 
 -- Probar la consulta
-EXEC [dbo].[GetUserSubscriptionsJSON] @userID = 1;
+EXEC [dbo].[GetUserSubscriptionsJSON] @userID = 8;
 GO
 
 -- Justificación hipotética de la pantalla que podría requerir esta consulta:
@@ -46,3 +46,7 @@ GO
 -- lo que mejora la experiencia de usuario al proporcionar información clara y visualmente atractiva. 
 -- Alternativamente, esta consulta podría servir para una pantalla de "Explorar Planes" si se adapta para mostrar planes disponibles antes de suscribirse, 
 -- pero "Mis Suscripciones" es más relevante porque se centra en el consumo actual del usuario.
+
+
+SELECT * FROM [dbo].[st_subcriptions];
+SELECT * FROM [dbo].[st_subcriptions] WHERE userID = 8;
